@@ -1,45 +1,25 @@
 # %%
 from imgen import gen_image
-from PIL import Image
 import random
 from copy import deepcopy
-from numpy import ones, sqrt
+from numpy import ones, exp, expand_dims
+from IPython.display import display
+
+# Quickly buffer image
+gen_image("Testing bunny")
 
 #%%
-# Temp optimization goal: find bluest image!
-def square(rgb, size=(100, 100)):
-    return Image.new("RGB", size, rgb)
+# Loading our pre-trained model for paintings prices
+import autokeras as ak # We need this otherwise model doesn't load :(
+from keras.models import load_model
+price_model = load_model("model-full128_trainlong.h5", compile=False)
 
-# def dominant_color(img):
-#     return img.copy() \
-#         .resize((1, 1), resample=0) \
-#         .getpixel((0, 0))
-
-# def dominant_colors(img, palette_size=10, n=3):
-#     # Resize image to speed up processing
-#     clusters = img.copy() \
-#         .resize((100, 100)) \
-#         .convert("P", colors=palette_size)
-
-#     color_counts = sorted(clusters.getcolors(), reverse=True)
-#     palette = clusters.getpalette()
-#     return [tuple(palette[c[1]*3:c[1]*3+3]) for c in color_counts[:n]]
-
-def rgb_distance(c1, c2):
-    # return sum(map(lambda x: (x[1]-x[0])**2, zip(c1, c2)))
-    # Account a bit for human perception
-    return 0.30 * (c2[0] - c1[0])**2 \
-         + 0.59 * (c2[1] - c1[1])**2 \
-         + 0.11 * (c2[2] - c1[2])**2
-
-RED = (255, 30, 30)
-GREEN = (30, 255, 30)
-BLUE = (30, 30, 255)
-
+#%%
+IMG_INPUT_SIZE = (128, 128)
 def score(img):
-    # Dummy scoring for how blue an image is
-    return sum((rgb_distance(c, RED)
-        for c in img.copy().resize((20, 20)).getdata()))
+    prediction = price_model.predict(expand_dims(img.resize(IMG_INPUT_SIZE), axis=0))
+    # Values are log normalized
+    return exp(prediction).item(0)
 
 #%%
 # Temp prompt engineering
@@ -69,7 +49,7 @@ class Wordlist:
 
 wordlists = [
     Wordlist("wordlists/adjectives.txt", reward=dict(small=10, big=100)),
-    Wordlist("wordlists/nouns.txt", reward=dict(small=20, big=200)),
+    Wordlist("wordlists/nouns.txt", reward=dict(small=10, big=100)),
     Wordlist("wordlists/artstyles.txt", reward=dict(small=0, big=0.1))
 ]
 
@@ -99,11 +79,11 @@ class Prompt:
                 + " painting"
 
 # %%
-def mcmc(prompt):
+def mcmc(prompt, n=100, tries=10):
     # Set timers
     t = 0
-    tmax = 10
-    attempts = 10
+    tmax = n
+    attempts = tries
 
     # Initialize scores
     img = gen_image(prompt)
@@ -112,8 +92,9 @@ def mcmc(prompt):
     checkpoints = [score0]
 
     # Quick check
-    print(prompt, " ", score0)
-    display(img)
+    with open("log/data.dat", "a") as f:
+        f.write(f"{prompt}, {score0}\n")
+    img.save(f"log/imgs/{len(scores)}.jpg")
 
     # Bias for initial guess
     for w in wordlists: w.reset_scores()
@@ -130,7 +111,7 @@ def mcmc(prompt):
         new_score = score(new_img)
         scores.append(new_score)
 
-        if new_score < checkpoints[-1]:
+        if new_score > checkpoints[-1]:
             # Last change is good! Reward!
             new_prompt.reward_last_change("big")
 
@@ -141,11 +122,14 @@ def mcmc(prompt):
 
             # Update MCMC steps and reset attempts
             t += 1
-            attempts = 10
+            attempts = tries
 
             # Check progress
-            print(prompt, " ", new_score)
-            display(new_img)
+            # print(prompt, " ", new_score)
+            # display(new_img)
+            with open("log/data.dat", "a") as f:
+                f.write(f"{prompt}, {new_score}\n")
+            img.save(f"log/imgs/{len(scores)}.jpg")
 
         else:
             # Hard to beat prompt
@@ -155,4 +139,5 @@ def mcmc(prompt):
 
 
 # %%
-output = mcmc(Prompt(0, 0, 6))
+output = mcmc(Prompt(0, 0, 1), n=100, tries=100)
+print("Done!")
