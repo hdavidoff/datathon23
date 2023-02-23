@@ -1,5 +1,4 @@
 Abstract Expressionism
-Oil
 Art Deco
 Art Nouveau
 Avant-garde
@@ -18,6 +17,7 @@ Fauvism
 Futurism
 Harlem Renaissance
 Impressionism
+Installation Art
 Land Art
 Minimalism
 Neo-Impressionism
